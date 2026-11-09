@@ -100,6 +100,16 @@ mark{background:var(--sun); color:var(--on-sky); border-radius:3px; padding:0 1p
 .legend{display:flex; gap:12px; font-size:12px; color:var(--sub); margin-top:6px}
 .legend i{display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:-1px}
 .hidden{display:none !important}
+.tabs button{padding:0 4px}
+.sum{font-size:14px; margin:4px 0 0; overflow-wrap:anywhere}
+.sum b{font-size:11px; color:var(--sub); font-weight:700; margin-right:6px}
+.prof{background:var(--paper); border-radius:14px; padding:12px 14px; margin-top:10px}
+.prof h3{font-size:15px; margin:0 0 6px; padding-left:8px; border-left:4px solid var(--sky)}
+.prof ul{margin:0; padding:0; list-style:none}
+.prof li{padding:7px 0; border-top:1px solid var(--line); font-size:14px; overflow-wrap:anywhere}
+.prof li:first-child{border-top:0}
+.src{display:inline-flex; flex-wrap:wrap; gap:4px; margin-left:4px; vertical-align:1px}
+.src a{font-size:11px; color:var(--sub); background:var(--track); border-radius:999px; padding:0 7px; text-decoration:none}
 </style>
 </head>
 <body>
@@ -112,6 +122,7 @@ mark{background:var(--sun); color:var(--on-sky); border-radius:3px; padding:0 1p
     <button data-t="all" class="on">まとめ</button>
     <button data-t="blog">ブログ<span class="n" id="nBlog"></span></button>
     <button data-t="talk">トーク<span class="n" id="nTalk"></span></button>
+    <button data-t="prof">プロフ</button>
   </div>
 
   <div class="row" style="margin-top:0">
@@ -148,6 +159,17 @@ mark{background:var(--sun); color:var(--on-sky); border-radius:3px; padding:0 1p
       </div>
       <p class="note" id="blogUpdated"></p>
       <div id="blogList"></div>
+    </section>
+  </div>
+
+  <!-- プロフィール -->
+  <div id="pProf" class="hidden">
+    <section>
+      <div class="card">
+        <h2 style="margin:0">片山紗希ちゃんってこんな人</h2>
+        <p class="note" id="profMeta" style="margin-top:4px"></p>
+      </div>
+      <div id="profBody"></div>
     </section>
   </div>
 
@@ -197,6 +219,7 @@ const blank = () => ({ talks: [], read: {}, notes: {}, lastSeen: '' });
 let st = blank();
 let canStore = true;
 let blog = { posts: [], updated: null };
+let summ = {}, prof = null;
 let tab = 'all', tagFilter = '', editing = null;
 let prevSeen = '';
 
@@ -245,7 +268,7 @@ function blogItem(p){
     '<div class="meta"><span class="badge">ブログ</span>' + (isNew ? '<span class="badge new">NEW</span>' : '') +
     '<span>' + esc(fmt(p.date)) + '</span></div>' +
     '<h3><a href="' + esc(p.url) + '" target="_blank" rel="noopener">' + hl(p.title || '（無題）', q) + '</a></h3>' +
-    '<p class="ex">' + hl(p.excerpt || '', q) + '</p>' +
+    (summ[p.id] ? '<p class="sum"><b>要約</b>' + hl(summ[p.id], q) + '</p>' : '<p class="ex">' + hl(p.excerpt || '', q) + '</p>') +
     (noteOf(p.id) ? '<p class="mynote">' + hl(noteOf(p.id), q) + '</p>' : '') +
     '<div class="acts"><button data-a="read" class="' + (read ? 'on' : '') + '">' + (read ? '既読' : '未読') + '</button>' +
     '<button data-a="note">' + (noteOf(p.id) ? 'メモを編集' : 'メモ・タグ') + '</button></div>';
@@ -288,10 +311,11 @@ function fill(box, items, emptyText){
 
 /* ---------- 描画: 全体 ---------- */
 function render(){
-  const posts = blog.posts.filter(p => matches([p.title, p.excerpt, noteOf(p.id)], blogTags(p)));
+  const posts = blog.posts.filter(p => matches([p.title, p.excerpt, summ[p.id], noteOf(p.id)], blogTags(p)));
   const talks = [...st.talks].sort((a, b) => a.when < b.when ? 1 : -1).filter(t => matches([t.body, t.kind, t.tags.join(' ')], t.tags));
   const unread = blog.posts.filter(p => !st.read[p.id]).length;
-  $('nBlog').textContent = unread ? '未読' + unread : '';
+  $('nBlog').textContent = unread ? unread : '';
+  $('nBlog').title = unread ? '未読' + unread + '件' : '';
   $('nTalk').textContent = st.talks.length ? st.talks.length : '';
 
   // アクティブなタグ
@@ -326,7 +350,31 @@ function render(){
     : '<p class="empty">トークメモにタグを付けると、ここに集まります。</p>';
   $('tagCloud').querySelectorAll('[data-tag]').forEach(b => b.onclick = () => setTag(b.dataset.tag === tagFilter ? '' : b.dataset.tag));
 
+  renderProf();
   $('storeNote').textContent = canStore ? '' : 'この環境ではメモが保存されません。ページを閉じると消えます。';
+}
+
+/* プロフィール（ブログから作ったまとめ）。各項目に元記事へのリンクを付ける */
+function renderProf(){
+  const box = $('profBody');
+  if(!prof){ box.innerHTML = '<p class="empty">プロフィールを読み込めませんでした。</p>'; return; }
+  $('profMeta').textContent = 'ブログ' + prof.posts + '本（' + fmt(prof.from) + '〜' + fmt(prof.to) + '）から作成。' + (prof.note || '');
+  const q = $('q').value.trim(), ql = q.toLowerCase();
+  const byId = {}; blog.posts.forEach(p => byId[p.id] = p);
+  const link = id => {
+    const p = byId[id];
+    const url = p ? p.url : 'https://www.hinatazaka46.com/s/official/diary/detail/' + id + '?ima=0000&cd=member';
+    const label = p ? fmt(p.date.slice(0, 10)) : '元記事';
+    return '<a href="' + esc(url) + '" target="_blank" rel="noopener"' + (p ? ' title="' + esc(p.title) + '"' : '') + '>' + esc(label) + '</a>';
+  };
+  const html = prof.sections.map(s => {
+    const items = s.items.filter(it => !ql || it.text.toLowerCase().includes(ql) || s.title.includes(q));
+    if(!items.length) return '';
+    return '<div class="prof"><h3>' + esc(s.title) + '</h3><ul>' +
+      items.map(it => '<li>' + hl(it.text, q) + '<span class="src">' + it.src.map(link).join('') + '</span></li>').join('') +
+      '</ul></div>';
+  }).join('');
+  box.innerHTML = html || '<p class="empty">条件に合う項目はありません。</p>';
 }
 
 function renderStats(){
@@ -393,6 +441,7 @@ function switchTab(t){
   $('pAll').classList.toggle('hidden', t !== 'all');
   $('pBlog').classList.toggle('hidden', t !== 'blog');
   $('pTalk').classList.toggle('hidden', t !== 'talk');
+  $('pProf').classList.toggle('hidden', t !== 'prof');
   try{ sessionStorage.setItem(KEY + '-tab', t); }catch(e){}
 }
 $('tabs').onclick = e => { const b = e.target.closest('button'); if(b) switchTab(b.dataset.t); };
@@ -439,6 +488,9 @@ fetch('data/saki-blog.json', { cache: 'no-cache' })
     fillMonths(); render();
   })
   .catch(() => { $('blogUpdated').textContent = 'ブログ一覧を読み込めませんでした。GitHub Pages などのサーバー上で開いてください。'; });
+const getJSON = u => fetch(u, { cache: 'no-cache' }).then(r => r.ok ? r.json() : Promise.reject(r.status));
+getJSON('data/saki-summaries.json').then(j => { summ = j.summaries || {}; render(); }).catch(() => {});
+getJSON('data/saki-profile.json').then(j => { prof = j; render(); }).catch(() => render());
 </script>
 </body>
 </html>
