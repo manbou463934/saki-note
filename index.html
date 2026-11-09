@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>紗希ちゃんノート</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="紗希ちゃんノート">
+<meta name="theme-color" content="#5bb8ea">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+:root{
+  --bg:#eaf5fc; --paper:#ffffff; --ink:#17324d; --sub:#62798c;
+  --sky:#5bb8ea; --sun:#ffd84d; --line:#cfe3f1;
+  --danger:#d9505a; --track:#dcedf8; --on-sky:#0d2638;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0e1a24; --paper:#16273a; --ink:#e9f3fa; --sub:#97aebf;
+    --sky:#6cc4f0; --sun:#ffd84d; --line:#2a4258;
+    --danger:#ff8a92; --track:#223a50; --on-sky:#0d2638;
+    color-scheme: dark;
+  }
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Hiragino Maru Gothic ProN","Hiragino Sans","Yu Gothic",system-ui,sans-serif;
+  line-height:1.6; -webkit-text-size-adjust:100%;
+}
+main{max-width:560px; margin:0 auto; padding:20px 16px 48px}
+h1{font-size:20px; margin:0; font-weight:700}
+.top{display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:12px}
+.top a{color:var(--sub); font-size:13px}
+button,input,select,textarea{font:inherit; color:inherit}
+:focus-visible{outline:3px solid var(--sun); outline-offset:2px}
+
+.tabs{display:flex; gap:6px; position:sticky; top:0; background:var(--bg); padding:6px 0 10px; z-index:2}
+.tabs button{
+  flex:1; border:2px solid var(--line); background:transparent; border-radius:999px;
+  min-height:42px; cursor:pointer; font-weight:700; color:var(--sub);
+}
+.tabs button.on{background:var(--ink); color:var(--paper); border-color:var(--ink)}
+.tabs .n{font-size:11px; font-weight:400; margin-left:2px}
+
+section{margin-top:18px}
+h2{font-size:15px; margin:0 0 8px; font-weight:700}
+.card{background:var(--paper); border-radius:14px; padding:14px}
+.row{display:flex; gap:8px; margin-top:8px; flex-wrap:wrap}
+.row > *{flex:1; min-width:0}
+input,select,textarea{
+  background:var(--paper); border:2px solid var(--line); border-radius:12px;
+  padding:9px 12px; min-height:44px; width:100%;
+}
+textarea{min-height:88px; resize:vertical}
+.btn{
+  border:0; border-radius:12px; padding:10px 16px; min-height:44px; cursor:pointer;
+  font-weight:700; background:var(--ink); color:var(--paper); flex:none;
+}
+.btn.ghost{background:transparent; color:var(--ink); border:2px solid var(--line)}
+.lbl{display:block; font-size:13px; color:var(--sub); margin:10px 0 4px}
+.check{display:flex; align-items:center; gap:6px; font-size:14px; color:var(--sub); flex:none}
+.check input{width:20px; min-height:20px; height:20px}
+
+.item{background:var(--paper); border-radius:14px; padding:12px 14px; margin-bottom:10px; border-left:5px solid var(--sky)}
+.item.read{border-left-color:var(--line)}
+.item.talk{border-left-color:var(--sun)}
+.meta{display:flex; gap:8px; align-items:center; font-size:12px; color:var(--sub); flex-wrap:wrap}
+.badge{background:var(--track); border-radius:999px; padding:1px 8px; font-weight:700}
+.badge.new{background:var(--sun); color:var(--on-sky)}
+.item h3{font-size:16px; margin:4px 0 2px}
+.item h3 a{color:inherit}
+.ex{font-size:14px; color:var(--sub); margin:2px 0 0; overflow-wrap:anywhere}
+.body{font-size:15px; margin:4px 0 0; white-space:pre-wrap; overflow-wrap:anywhere}
+.tags{display:flex; flex-wrap:wrap; gap:6px; margin-top:6px}
+.tag{border:0; background:var(--track); color:var(--ink); border-radius:999px; padding:3px 10px; font-size:13px; cursor:pointer; min-height:30px}
+.tag.on{background:var(--sky); color:var(--on-sky); font-weight:700}
+.tag small{color:var(--sub); margin-left:3px}
+.acts{display:flex; gap:6px; margin-top:8px; flex-wrap:wrap}
+.acts button{border:2px solid var(--line); background:transparent; border-radius:999px; padding:2px 12px; min-height:34px; cursor:pointer; font-size:13px; color:var(--sub)}
+.acts button.on{color:var(--ink); border-color:var(--sky)}
+.mynote{font-size:14px; margin:8px 0 0; padding:8px 10px; background:var(--bg); border-radius:10px; white-space:pre-wrap; overflow-wrap:anywhere}
+.empty{color:var(--sub); font-size:14px; padding:8px 2px}
+.note{font-size:12px; color:var(--sub); margin-top:8px}
+mark{background:var(--sun); color:var(--on-sky); border-radius:3px; padding:0 1px}
+
+.stats{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px}
+.stat{background:var(--paper); border-radius:12px; padding:10px 12px}
+.stat small{display:block; color:var(--sub); font-size:12px}
+.stat b{font-size:20px; font-variant-numeric:tabular-nums}
+.chart{display:flex; align-items:flex-end; gap:4px; height:110px; margin-top:4px}
+.col{flex:1; height:100%; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; gap:1px}
+.col .v{font-size:10px; color:var(--sub); line-height:1.2}
+.seg{width:100%; border-radius:4px 4px 0 0}
+.seg.b{background:var(--sky)} .seg.t{background:var(--sun); border-radius:0}
+.xl{display:flex; gap:4px; margin-top:4px}
+.xl span{flex:1; text-align:center; font-size:10px; color:var(--sub)}
+.legend{display:flex; gap:12px; font-size:12px; color:var(--sub); margin-top:6px}
+.legend i{display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:-1px}
+.hidden{display:none !important}
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <h1>紗希ちゃんノート</h1>
+  </div>
+
+  <div class="tabs" id="tabs" role="tablist">
+    <button data-t="all" class="on">まとめ</button>
+    <button data-t="blog">ブログ<span class="n" id="nBlog"></span></button>
+    <button data-t="talk">トーク<span class="n" id="nTalk"></span></button>
+  </div>
+
+  <div class="row" style="margin-top:0">
+    <input type="search" id="q" placeholder="キーワードで探す（例：ラーメン、レッスン）">
+  </div>
+  <div class="tags" id="activeTag"></div>
+
+  <!-- まとめ -->
+  <div id="pAll">
+    <section>
+      <div class="stats" id="stats"></div>
+      <div class="card" style="margin-top:8px">
+        <div class="chart" id="chart"></div>
+        <div class="xl" id="xl"></div>
+        <div class="legend"><span><i style="background:var(--sky)"></i>ブログ</span><span><i style="background:var(--sun)"></i>トークメモ</span></div>
+      </div>
+    </section>
+    <section>
+      <h2>よく出てくるタグ</h2>
+      <div class="tags" id="tagCloud"></div>
+    </section>
+    <section>
+      <h2>タイムライン</h2>
+      <div id="timeline"></div>
+    </section>
+  </div>
+
+  <!-- ブログ -->
+  <div id="pBlog" class="hidden">
+    <section>
+      <div class="row" style="margin-top:0">
+        <select id="month" aria-label="月で絞り込み"></select>
+        <label class="check"><input type="checkbox" id="unreadOnly">未読だけ</label>
+      </div>
+      <p class="note" id="blogUpdated"></p>
+      <div id="blogList"></div>
+    </section>
+  </div>
+
+  <!-- トーク -->
+  <div id="pTalk" class="hidden">
+    <section>
+      <h2>トークをメモする</h2>
+      <div class="card">
+        <div class="row" style="margin-top:0">
+          <input type="datetime-local" id="tWhen" aria-label="日時">
+          <select id="tKind" aria-label="種類">
+            <option>テキスト</option><option>画像</option><option>動画</option><option>音声</option>
+          </select>
+        </div>
+        <label class="lbl" for="tBody">内容（要約や印象に残ったこと）</label>
+        <textarea id="tBody" placeholder="例：今日はダンスレッスン。新しい振りが難しかったらしい"></textarea>
+        <label class="lbl" for="tTags">タグ（スペース区切り）</label>
+        <input type="text" id="tTags" placeholder="例：レッスン 食べもの 予定">
+        <div class="tags" id="tagSuggest"></div>
+        <div class="row"><button class="btn" id="tSave" style="flex:1">記録する</button><button class="btn ghost hidden" id="tCancel">やめる</button></div>
+      </div>
+      <p class="note">トークは公式アプリの有料コンテンツなので自動取得はしません。メモはこの端末の中だけに保存され、どこにも送信・公開されません。</p>
+    </section>
+    <section>
+      <h2>トークの記録</h2>
+      <div id="talkList"></div>
+    </section>
+  </div>
+
+  <section>
+    <h2>バックアップ</h2>
+    <p class="note" style="margin:0 0 8px">トークメモ・既読・ブログへのメモをテキストで控えておけます。</p>
+    <div class="row" style="margin-top:0">
+      <button class="btn ghost" id="bkShow">控えを表示</button>
+      <button class="btn ghost" id="bkOpen">控えから復元</button>
+    </div>
+    <textarea id="bkText" class="hidden" rows="5" aria-label="バックアップ用テキスト" style="margin-top:8px;font-size:13px;word-break:break-all"></textarea>
+    <div class="row hidden" id="bkRow"><button class="btn" id="bkRestore" style="flex:1">この内容で復元</button></div>
+    <p class="note" id="bkMsg"></p>
+  </section>
+  <p class="note" id="storeNote"></p>
+</main>
+
+<script>
+const KEY = 'saki-note';
+const blank = () => ({ talks: [], read: {}, notes: {}, lastSeen: '' });
+let st = blank();
+let canStore = true;
+let blog = { posts: [], updated: null };
+let tab = 'all', tagFilter = '', editing = null;
+let prevSeen = '';
+
+const $ = id => document.getElementById(id);
+const pad = n => (n < 10 ? '0' : '') + n;
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const nowLocal = () => { const d = new Date(); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes()); };
+const fmt = s => { const m = /^(\d{4})-(\d\d)-(\d\d)(?:T(\d\d):(\d\d))?/.exec(s || ''); return m ? (m[1]+'/'+(+m[2])+'/'+(+m[3])+(m[4] ? ' '+m[4]+':'+m[5] : '')) : (s || ''); };
+const splitTags = s => [...new Set(String(s || '').split(/[\s　,、#＃]+/).map(t => t.trim()).filter(Boolean))];
+
+function load(){ try{ const v = localStorage.getItem(KEY); if(v) st = Object.assign(blank(), JSON.parse(v)); }catch(e){ canStore = false; } }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(st)); }catch(e){ canStore = false; } }
+
+function hl(text, q){
+  const t = esc(text);
+  if(!q) return t;
+  const e = esc(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return t.replace(new RegExp(e, 'gi'), m => '<mark>' + m + '</mark>');
+}
+function matches(fields, tags){
+  const q = $('q').value.trim().toLowerCase();
+  if(tagFilter && !(tags || []).includes(tagFilter)) return false;
+  if(!q) return true;
+  return fields.some(f => String(f || '').toLowerCase().includes(q));
+}
+
+/* ブログ記事に付けた自分のタグ（メモ内の #タグ） */
+const noteOf = id => st.notes[id] || '';
+const blogTags = p => (noteOf(p.id).match(/[#＃][^\s#＃]+/g) || []).map(t => t.slice(1));
+
+function allTags(){
+  const c = {};
+  st.talks.forEach(t => t.tags.forEach(x => c[x] = (c[x] || 0) + 1));
+  blog.posts.forEach(p => blogTags(p).forEach(x => c[x] = (c[x] || 0) + 1));
+  return Object.entries(c).sort((a, b) => b[1] - a[1]);
+}
+
+/* ---------- 描画: 部品 ---------- */
+function blogItem(p){
+  const q = $('q').value.trim();
+  const read = !!st.read[p.id];
+  const isNew = prevSeen && p.date > prevSeen && !read;
+  const el = document.createElement('div');
+  el.className = 'item' + (read ? ' read' : '');
+  el.innerHTML =
+    '<div class="meta"><span class="badge">ブログ</span>' + (isNew ? '<span class="badge new">NEW</span>' : '') +
+    '<span>' + esc(fmt(p.date)) + '</span></div>' +
+    '<h3><a href="' + esc(p.url) + '" target="_blank" rel="noopener">' + hl(p.title || '（無題）', q) + '</a></h3>' +
+    '<p class="ex">' + hl(p.excerpt || '', q) + '</p>' +
+    (noteOf(p.id) ? '<p class="mynote">' + hl(noteOf(p.id), q) + '</p>' : '') +
+    '<div class="acts"><button data-a="read" class="' + (read ? 'on' : '') + '">' + (read ? '既読' : '未読') + '</button>' +
+    '<button data-a="note">' + (noteOf(p.id) ? 'メモを編集' : 'メモ・タグ') + '</button></div>';
+  el.querySelector('[data-a=read]').onclick = () => { if(read) delete st.read[p.id]; else st.read[p.id] = 1; save(); render(); };
+  el.querySelector('[data-a=note]').onclick = () => {
+    const v = prompt('このブログのメモ（#タグ も使えます）', noteOf(p.id));
+    if(v === null) return;
+    if(v.trim()) st.notes[p.id] = v.trim(); else delete st.notes[p.id];
+    save(); render();
+  };
+  el.querySelector('h3 a').addEventListener('click', () => { st.read[p.id] = 1; save(); setTimeout(render, 300); });
+  return el;
+}
+
+function talkItem(t){
+  const q = $('q').value.trim();
+  const el = document.createElement('div');
+  el.className = 'item talk';
+  el.innerHTML =
+    '<div class="meta"><span class="badge">トーク・' + esc(t.kind) + '</span><span>' + esc(fmt(t.when)) + '</span></div>' +
+    '<p class="body">' + hl(t.body, q) + '</p>' +
+    '<div class="tags">' + t.tags.map(x => '<button class="tag" data-tag="' + esc(x) + '">#' + esc(x) + '</button>').join('') + '</div>' +
+    '<div class="acts"><button data-a="edit">編集</button><button data-a="del">削除</button></div>';
+  el.querySelectorAll('[data-tag]').forEach(b => b.onclick = () => setTag(b.dataset.tag));
+  el.querySelector('[data-a=edit]').onclick = () => startEdit(t);
+  const del = el.querySelector('[data-a=del]');
+  let armed = null;
+  del.onclick = () => {
+    if(armed){ clearTimeout(armed); st.talks = st.talks.filter(x => x.id !== t.id); save(); render(); return; }
+    del.textContent = 'もう一度で削除'; armed = setTimeout(() => { armed = null; del.textContent = '削除'; }, 3000);
+  };
+  return el;
+}
+
+function fill(box, items, emptyText){
+  box.innerHTML = '';
+  if(!items.length){ const p = document.createElement('p'); p.className = 'empty'; p.textContent = emptyText; box.appendChild(p); return; }
+  items.slice(0, 200).forEach(e => box.appendChild(e));
+}
+
+/* ---------- 描画: 全体 ---------- */
+function render(){
+  const posts = blog.posts.filter(p => matches([p.title, p.excerpt, noteOf(p.id)], blogTags(p)));
+  const talks = [...st.talks].sort((a, b) => a.when < b.when ? 1 : -1).filter(t => matches([t.body, t.kind, t.tags.join(' ')], t.tags));
+  const unread = blog.posts.filter(p => !st.read[p.id]).length;
+  $('nBlog').textContent = unread ? '未読' + unread : '';
+  $('nTalk').textContent = st.talks.length ? st.talks.length : '';
+
+  // アクティブなタグ
+  $('activeTag').innerHTML = tagFilter ? '<button class="tag on" id="clearTag">#' + esc(tagFilter) + ' ×</button>' : '';
+  if(tagFilter) $('clearTag').onclick = () => setTag('');
+
+  // ブログタブ
+  const m = $('month').value, uo = $('unreadOnly').checked;
+  fill($('blogList'),
+    posts.filter(p => (!m || p.date.startsWith(m)) && (!uo || !st.read[p.id])).map(blogItem),
+    blog.posts.length ? '条件に合う記事はありません。' : 'まだ記事がありません。GitHub Actions の「片山紗希ブログ取得」を一度実行してください。');
+  $('blogUpdated').textContent = blog.updated ? '最終更新：' + fmt(blog.updated.slice(0, 16)) + '（3時間ごとに自動取得）' : '';
+
+  // トークタブ
+  fill($('talkList'), talks.map(talkItem), st.talks.length ? '条件に合うメモはありません。' : 'まだメモがありません。');
+  const sug = allTags().slice(0, 12);
+  $('tagSuggest').innerHTML = sug.map(([x]) => '<button class="tag" type="button" data-tag="' + esc(x) + '">#' + esc(x) + '</button>').join('');
+  $('tagSuggest').querySelectorAll('[data-tag]').forEach(b => b.onclick = () => {
+    const cur = splitTags($('tTags').value); if(!cur.includes(b.dataset.tag)) cur.push(b.dataset.tag);
+    $('tTags').value = cur.join(' ');
+  });
+
+  // まとめタブ
+  const tl = posts.map(p => ({ d: p.date, el: () => blogItem(p) }))
+    .concat(talks.map(t => ({ d: t.when, el: () => talkItem(t) })))
+    .sort((a, b) => a.d < b.d ? 1 : -1).slice(0, 60).map(x => x.el());
+  fill($('timeline'), tl, 'まだ何もありません。ブログの取得を待つか、トークをメモしてみよう。');
+  renderStats();
+  const cloud = allTags().slice(0, 30);
+  $('tagCloud').innerHTML = cloud.length
+    ? cloud.map(([x, n]) => '<button class="tag' + (x === tagFilter ? ' on' : '') + '" data-tag="' + esc(x) + '">#' + esc(x) + '<small>' + n + '</small></button>').join('')
+    : '<p class="empty">トークメモにタグを付けると、ここに集まります。</p>';
+  $('tagCloud').querySelectorAll('[data-tag]').forEach(b => b.onclick = () => setTag(b.dataset.tag === tagFilter ? '' : b.dataset.tag));
+
+  $('storeNote').textContent = canStore ? '' : 'この環境ではメモが保存されません。ページを閉じると消えます。';
+}
+
+function renderStats(){
+  const now = new Date();
+  const ym = now.getFullYear() + '-' + pad(now.getMonth() + 1);
+  const thisMonth = blog.posts.filter(p => p.date.startsWith(ym)).length;
+  const last = blog.posts[0];
+  const days = last ? Math.floor((now - new Date(last.date)) / 86400000) : null;
+  const cards = [
+    ['今月のブログ', thisMonth + '件'],
+    ['最後の更新', days == null ? '—' : days <= 0 ? '今日' : days + '日前'],
+    ['トークメモ', st.talks.length + '件']
+  ];
+  $('stats').innerHTML = cards.map(c => '<div class="stat"><small>' + c[0] + '</small><b>' + c[1] + '</b></div>').join('');
+
+  // 直近12か月
+  const months = [];
+  for(let i = 11; i >= 0; i--){ const d = new Date(now.getFullYear(), now.getMonth() - i, 1); months.push(d.getFullYear() + '-' + pad(d.getMonth() + 1)); }
+  const b = months.map(k => blog.posts.filter(p => p.date.startsWith(k)).length);
+  const t = months.map(k => st.talks.filter(x => x.when.startsWith(k)).length);
+  const max = Math.max(1, ...months.map((_, i) => b[i] + t[i]));
+  const H = 90;
+  $('chart').innerHTML = months.map((k, i) =>
+    '<div class="col" title="' + k + ' ブログ' + b[i] + ' / トーク' + t[i] + '"><span class="v">' + ((b[i] + t[i]) || '') + '</span>' +
+    '<div class="seg t" style="height:' + Math.round(t[i] / max * H) + 'px"></div>' +
+    '<div class="seg b" style="height:' + Math.round(b[i] / max * H) + 'px;border-radius:' + (t[i] ? '0' : '4px 4px 0 0') + '"></div></div>').join('');
+  $('xl').innerHTML = months.map(k => '<span>' + (+k.slice(5)) + '月</span>').join('');
+}
+
+function setTag(t){ tagFilter = t; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+
+function fillMonths(){
+  const ms = [...new Set(blog.posts.map(p => p.date.slice(0, 7)))].sort().reverse();
+  $('month').innerHTML = '<option value="">すべての月</option>' + ms.map(m => '<option value="' + m + '">' + m.replace('-', '年') + '月</option>').join('');
+}
+
+/* ---------- トーク入力 ---------- */
+function resetForm(){
+  editing = null;
+  $('tWhen').value = nowLocal(); $('tKind').value = 'テキスト'; $('tBody').value = ''; $('tTags').value = '';
+  $('tSave').textContent = '記録する'; $('tCancel').classList.add('hidden');
+}
+function startEdit(t){
+  switchTab('talk');
+  editing = t.id;
+  $('tWhen').value = t.when; $('tKind').value = t.kind; $('tBody').value = t.body; $('tTags').value = t.tags.join(' ');
+  $('tSave').textContent = '更新する'; $('tCancel').classList.remove('hidden');
+  $('tBody').focus();
+}
+$('tSave').onclick = () => {
+  const body = $('tBody').value.trim();
+  if(!body){ $('tBody').focus(); return; }
+  const rec = { when: $('tWhen').value || nowLocal(), kind: $('tKind').value, body: body, tags: splitTags($('tTags').value) };
+  if(editing){ const t = st.talks.find(x => x.id === editing); if(t) Object.assign(t, rec); }
+  else st.talks.push(Object.assign({ id: Date.now() + '-' + Math.random().toString(36).slice(2, 7) }, rec));
+  save(); resetForm(); render();
+};
+$('tCancel').onclick = resetForm;
+
+/* ---------- タブ・検索 ---------- */
+function switchTab(t){
+  tab = t;
+  [...$('tabs').children].forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  $('pAll').classList.toggle('hidden', t !== 'all');
+  $('pBlog').classList.toggle('hidden', t !== 'blog');
+  $('pTalk').classList.toggle('hidden', t !== 'talk');
+  try{ sessionStorage.setItem(KEY + '-tab', t); }catch(e){}
+}
+$('tabs').onclick = e => { const b = e.target.closest('button'); if(b) switchTab(b.dataset.t); };
+let qt = null;
+$('q').oninput = () => { clearTimeout(qt); qt = setTimeout(render, 150); };
+$('month').onchange = render;
+$('unreadOnly').onchange = render;
+
+/* ---------- バックアップ ---------- */
+$('bkShow').onclick = () => {
+  const t = $('bkText');
+  t.classList.remove('hidden'); $('bkRow').classList.add('hidden');
+  t.readOnly = true; t.value = JSON.stringify(st); t.focus(); t.select();
+  let ok = false; try{ ok = document.execCommand('copy'); }catch(e){}
+  $('bkMsg').textContent = ok ? 'コピーしました。メモアプリなどに貼り付けて保存してください。' : '全選択しました。コピーして保存してください。';
+};
+$('bkOpen').onclick = () => {
+  const t = $('bkText');
+  t.classList.remove('hidden'); t.readOnly = false; t.value = ''; t.placeholder = 'ここに控えを貼り付け';
+  $('bkRow').classList.remove('hidden'); t.focus(); $('bkMsg').textContent = '';
+};
+$('bkRestore').onclick = () => {
+  try{
+    const o = JSON.parse($('bkText').value.trim());
+    if(!o || !Array.isArray(o.talks)) throw new Error('bad');
+    st = Object.assign(blank(), o); save(); render();
+    $('bkText').classList.add('hidden'); $('bkRow').classList.add('hidden');
+    $('bkMsg').textContent = '復元しました。';
+  }catch(e){ $('bkMsg').textContent = '読み込めませんでした。控えを全部コピーして貼り付けてください。'; }
+};
+
+/* ---------- 起動 ---------- */
+load();
+prevSeen = st.lastSeen;
+try{ const t = sessionStorage.getItem(KEY + '-tab'); if(t) switchTab(t); }catch(e){}
+resetForm();
+render();
+fetch('data/saki-blog.json', { cache: 'no-cache' })
+  .then(r => r.ok ? r.json() : Promise.reject(r.status))
+  .then(j => {
+    blog = Object.assign({ posts: [] }, j);
+    blog.posts.sort((a, b) => a.date < b.date ? 1 : -1);
+    if(blog.posts[0]){ st.lastSeen = blog.posts[0].date; save(); }
+    fillMonths(); render();
+  })
+  .catch(() => { $('blogUpdated').textContent = 'ブログ一覧を読み込めませんでした。GitHub Pages などのサーバー上で開いてください。'; });
+</script>
+</body>
+</html>

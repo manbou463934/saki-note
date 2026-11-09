@@ -1,0 +1,42 @@
+name: 片山紗希ブログ取得
+
+on:
+  schedule:
+    - cron: "17 */3 * * *"   # 3時間ごと（UTC）
+  workflow_dispatch:
+    inputs:
+      pages:
+        description: "さかのぼるページ数（初回は 10 など）"
+        default: "1"
+      ct:
+        description: "メンバー番号 ct（空欄なら自動で探す）"
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fetch-saki-blog
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: ブログ一覧を取得
+        env:
+          PAGES: ${{ github.event.inputs.pages || '1' }}
+          MEMBER_CT: ${{ github.event.inputs.ct }}
+        run: python3 scripts/fetch_blog.py
+      - name: 変更があればコミット
+        run: |
+          if git diff --quiet data/; then echo "新着なし"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
+          git add data/saki-blog.json
+          git commit -m "ブログ一覧を更新"
+          git push
