@@ -208,6 +208,15 @@ mark{background:var(--sun); color:var(--on-sky); border-radius:3px; padding:0 1p
       </div>
     </section>
 
+    <section id="svWeekSec" class="hidden">
+      <h2>今週の使用額 <small class="note" id="svWeekRange"></small></h2>
+      <div class="card">
+        <div class="bar-h"><span id="svWeekTxt"></span><span id="svWeekPct"></span></div>
+        <div class="bar"><i id="svWPace" class="pace"></i><i id="svWeekBar"></i></div>
+        <p class="note" id="svWeekNote" style="margin-bottom:0"></p>
+      </div>
+    </section>
+
     <section>
       <h2>記録する</h2>
       <div class="card">
@@ -593,6 +602,8 @@ function renderSv(){
     $('svMonthNote').textContent = '「設定」で月の使用上限を決めると、進み具合が見られます。';
   }
 
+  renderSvWeek();
+
   // この月の記録（自動の引き落としもふくむ）
   const rows = sv.deps.filter(x => x.date.startsWith(m)).map(x => ({ ...x, kind: 'dep' }))
     .concat(mSpends)
@@ -620,6 +631,43 @@ function renderSv(){
     }
     box.appendChild(el);
   });
+}
+
+/* 今週（月曜はじまり）の上限を月の上限から自動計算する。
+   週の初めの時点で残っている月の予算を、月の残り日数で割り、今週の日数（この月に入る日だけ）をかける。
+   先週使いすぎたら今週は少なく、節約できたら多くなる。週の途中では変わらない */
+function renderSvWeek(){
+  const sv = st.sv, today = todayStr(), sec = $('svWeekSec');
+  if(!(sv.monthly > 0)){ sec.classList.add('hidden'); return; }
+  sec.classList.remove('hidden');
+  const m = today.slice(0, 7);
+  const [yy, mm] = m.split('-').map(Number);
+  const days = new Date(yy, mm, 0).getDate();
+  const t = new Date(today + 'T00:00');
+  const mon = new Date(t); mon.setDate(t.getDate() - (t.getDay() + 6) % 7);
+  const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+  const ws = ymd(mon) < m + '-01' ? m + '-01' : ymd(mon);                 // 月をまたぐ週は、この月の分だけ
+  const we = ymd(sun) > m + '-' + pad(days) ? m + '-' + pad(days) : ymd(sun);
+  const wDays = +we.slice(8) - +ws.slice(8) + 1;
+  const leftDays = days - +ws.slice(8) + 1;
+  const before = sum(sv.spends.filter(x => x.date.startsWith(m) && x.date < ws));
+  const budget = Math.max(0, (sv.monthly - before) / leftDays * wDays);
+  const spent = sum(sv.spends.filter(x => x.date >= ws && x.date <= we));
+  const p = budget > 0 ? spent / budget : (spent > 0 ? 2 : 0);
+  $('svWeekRange').textContent = '（' + fmt(ws) + '〜' + fmt(we).slice(5) + '）';
+  $('svWeekTxt').textContent = yen(spent) + ' / ' + yen(budget);
+  $('svWeekPct').textContent = budget > 0 ? Math.round(p * 100) + '%' : '';
+  $('svWeekBar').style.width = Math.min(100, p * 100) + '%';
+  $('svWeekBar').className = p > 1 ? 'over' : '';
+  const dayIn = +today.slice(8) - +ws.slice(8) + 1;
+  const pace = budget * dayIn / wDays;
+  $('svWPace').style.width = Math.min(100, dayIn / wDays * 100) + '%';
+  const rest = wDays - dayIn + 1;
+  let note = '今週の上限は、月の残り ' + yen(sv.monthly - before) + ' を残り' + leftDays + '日で割った ' + wDays + '日分です。';
+  if(spent > budget) note += '上限を ' + yen(spent - budget) + ' 超えています。来週の上限が少なくなります。';
+  else note += 'あと ' + yen(budget - spent) + '（' + rest + '日で1日あたり ' + yen((budget - spent) / rest) + '）。' +
+    (spent > pace ? '今日までの目安（線）より ' + yen(spent - pace) + ' 多めです。' : '今日までの目安（線）より ' + yen(pace - spent) + ' 少なくて順調です。');
+  $('svWeekNote').textContent = note;
 }
 
 function fillSvSettings(){
