@@ -205,7 +205,6 @@ mark{background:var(--sun); color:var(--on-sky); border-radius:3px; padding:0 1p
         <div class="bar-h"><span id="svMonthTxt"></span><span id="svMonthPct"></span></div>
         <div class="bar"><i id="svPace" class="pace"></i><i id="svMonthBar"></i></div>
         <p class="note" id="svMonthNote" style="margin-bottom:0"></p>
-        <p class="note" id="svWeekNote" style="margin:4px 0 0"></p>
       </div>
     </section>
 
@@ -216,7 +215,6 @@ mark{background:var(--sun); color:var(--on-sky); border-radius:3px; padding:0 1p
           <input type="date" id="svDate" aria-label="日付">
           <select id="svKind" aria-label="種類">
             <option value="daily">毎日の支出</option>
-            <option value="food">食材費</option>
             <option value="dep">貯金</option>
           </select>
         </div>
@@ -225,7 +223,7 @@ mark{background:var(--sun); color:var(--on-sky); border-radius:3px; padding:0 1p
           <input type="number" id="svAmt" inputmode="numeric" min="0" placeholder="金額（円）" style="max-width:130px">
         </div>
         <div class="row"><button class="btn" id="svAdd" style="flex:1">記録する</button></div>
-        <p class="note">「毎日の支出」が1日の上限を超えたら、超えた分はすぐ貯金から引かれます。上限より少なく終わった日は、余りが次の日に自動で貯金に入ります。月の使用額には食材費も含みます。</p>
+        <p class="note">「毎日の支出」が1日の上限を超えたら、超えた分はすぐ貯金から引かれます。上限より少なく終わった日は、余りが次の日に自動で貯金に入ります。</p>
       </div>
     </section>
 
@@ -239,12 +237,10 @@ mark{background:var(--sun); color:var(--on-sky); border-radius:3px; padding:0 1p
       <div class="card">
         <label class="lbl" for="svGoal">目標額</label>
         <input type="number" id="svGoal" inputmode="numeric" min="0" placeholder="例：30000">
-        <label class="lbl" for="svDaily">1日の上限（食材費は含めない）</label>
+        <label class="lbl" for="svDaily">1日の上限</label>
         <input type="number" id="svDaily" inputmode="numeric" min="0" placeholder="例：1000">
         <p class="note" style="margin:4px 0 0">変えると「今日から」の上限になります。過去の日は当時の上限で計算します。<br><span id="svLimHist"></span></p>
-        <label class="lbl" for="svWeekFood">週の食材費の予算（月曜はじまり）</label>
-        <input type="number" id="svWeekFood" inputmode="numeric" min="0" placeholder="例：5000">
-        <label class="lbl" for="svMonthly">月の使用上限（食材費もふくむ）</label>
+        <label class="lbl" for="svMonthly">月の使用上限</label>
         <input type="number" id="svMonthly" inputmode="numeric" min="0" placeholder="例：50000">
         <div class="row"><button class="btn" id="svSaveSet" style="flex:1">設定を保存</button></div>
         <p class="note" id="svSetMsg"></p>
@@ -297,7 +293,7 @@ mark{background:var(--sun); color:var(--on-sky); border-radius:3px; padding:0 1p
 
 <script>
 const KEY = 'saki-note';
-const blankSv = () => ({ goal: 0, limits: [], weekFood: 0, monthly: 0, deps: [], spends: [] });
+const blankSv = () => ({ goal: 0, limits: [], monthly: 0, deps: [], spends: [] });
 const blank = () => ({ talks: [], read: {}, notes: {}, lastSeen: '', sv: blankSv() });
 let st = blank();
 let canStore = true;
@@ -509,7 +505,6 @@ const yen = n => (n < 0 ? '−' : '') + '¥' + Math.abs(Math.round(n)).toLocaleS
 const ymd = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
 const todayStr = () => ymd(new Date());
 const sum = a => a.reduce((s, x) => s + x.amount, 0);
-function weekStart(dateStr){ const d = new Date(dateStr + 'T00:00'); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return ymd(d); }
 
 /* 1日の上限は日付ごとに変えられる（limits: [{from, amt}]）。その日に効いている上限 */
 function limitOn(d){
@@ -552,8 +547,6 @@ function renderSv(){
   const total = sum(sv.deps) + sum(led);
   const todaySpent = sum(sv.spends.filter(x => x.kind === 'daily' && x.date === today));
   const todayLim = limitOn(today);
-  const ws = weekStart(today);
-  const weekFood = sum(sv.spends.filter(x => x.kind === 'food' && x.date >= ws && x.date <= today));
 
   const cards = [
     ['貯金の合計', yen(total), total < 0],
@@ -566,11 +559,12 @@ function renderSv(){
   $('svGoalBar').style.width = (gp * 100) + '%';
   $('svGoalTxt').textContent = sv.goal > 0 ? Math.round(gp * 100) + '%（' + yen(total) + ' / ' + yen(sv.goal) + '）' : '目標額を設定してください';
 
-  // 月の使用額（毎日の支出＋食材費）
+  // 月の使用額（前のアプリで記録した食材費もふくむ）
   fillSvMonths();
   const m = svMonthSel;
   const mSpends = sv.spends.filter(x => x.date.startsWith(m));
   const mSpent = sum(mSpends), mFood = sum(mSpends.filter(x => x.kind === 'food'));
+  const foodNote = mFood > 0 ? '（うち前のアプリの食材費 ' + yen(mFood) + '）' : '';
   const [yy, mm] = m.split('-').map(Number);
   const days = new Date(yy, mm, 0).getDate();
   const isNow = m === today.slice(0, 7);
@@ -591,16 +585,13 @@ function renderSv(){
       note = '残り ' + yen(sv.monthly - mSpent) + '。あと' + left + '日なので、1日あたり ' + yen((sv.monthly - mSpent) / left) + ' まで使えます。' +
         (mSpent > pace ? '今日までの目安（線）より ' + yen(mSpent - pace) + ' 多めです。' : '今日までの目安（線）より ' + yen(pace - mSpent) + ' 少なくて順調です。');
     } else note = yen(sv.monthly - mSpent) + ' 残して終わりました。';
-    $('svMonthNote').textContent = note + '（うち食材費 ' + yen(mFood) + '）';
+    $('svMonthNote').textContent = note + foodNote;
   } else {
     $('svMonthBar').style.width = '0'; $('svPace').classList.add('hidden');
-    $('svMonthTxt').textContent = yen(mSpent) + '（うち食材費 ' + yen(mFood) + '）';
+    $('svMonthTxt').textContent = yen(mSpent) + foodNote;
     $('svMonthPct').textContent = '';
     $('svMonthNote').textContent = '「設定」で月の使用上限を決めると、進み具合が見られます。';
   }
-  $('svWeekNote').textContent = sv.weekFood > 0
-    ? '今週の食材費：' + yen(weekFood) + ' / ' + yen(sv.weekFood) + (weekFood > sv.weekFood ? '（' + yen(weekFood - sv.weekFood) + ' オーバー）' : '（残り ' + yen(sv.weekFood - weekFood) + '）')
-    : '';
 
   // この月の記録（自動の引き落としもふくむ）
   const rows = sv.deps.filter(x => x.date.startsWith(m)).map(x => ({ ...x, kind: 'dep' }))
@@ -609,7 +600,7 @@ function renderSv(){
       ? { date: o.date, kind: 'left', amount: o.amount, memo: '予算の余りを自動で貯金（上限 ' + yen(o.lim) + '、使った額 ' + yen(o.spent) + '）' }
       : { date: o.date, kind: 'auto', amount: -o.amount, memo: '1日の上限オーバー分を貯金から引きました（上限 ' + yen(o.lim) + '、使った額 ' + yen(o.spent) + '）' }))
     .sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : (a.kind === 'auto' || a.kind === 'left') - (b.kind === 'auto' || b.kind === 'left'));
-  const label = { dep: '貯金', daily: '毎日の支出', food: '食材費', auto: '自動で引き落とし', left: '予算の余り' };
+  const label = { dep: '貯金', daily: '毎日の支出', food: '食材費（前のアプリ）', auto: '自動で引き落とし', left: '予算の余り' };
   const box = $('svList'); box.innerHTML = '';
   if(!rows.length){ box.innerHTML = '<p class="empty">まだ記録がありません。</p>'; return; }
   rows.forEach(r => {
@@ -633,13 +624,13 @@ function renderSv(){
 
 function fillSvSettings(){
   const sv = st.sv;
-  [['svGoal', 'goal'], ['svWeekFood', 'weekFood'], ['svMonthly', 'monthly']].forEach(([id, k]) => $(id).value = sv[k] || '');
+  [['svGoal', 'goal'], ['svMonthly', 'monthly']].forEach(([id, k]) => $(id).value = sv[k] || '');
   $('svDaily').value = limitOn(todayStr()) || '';
   const hist = sv.limits.slice().sort((a, b) => a.from < b.from ? -1 : 1);
   $('svLimHist').textContent = hist.length ? 'これまで：' + hist.map(l => fmt(l.from) + '〜 ' + yen(l.amt)).join(' ／ ') : '';
 }
 $('svSaveSet').onclick = () => {
-  [['svGoal', 'goal'], ['svWeekFood', 'weekFood'], ['svMonthly', 'monthly']].forEach(([id, k]) => st.sv[k] = Math.max(0, Math.round(+$(id).value || 0)));
+  [['svGoal', 'goal'], ['svMonthly', 'monthly']].forEach(([id, k]) => st.sv[k] = Math.max(0, Math.round(+$(id).value || 0)));
   // 1日の上限を変えたら「今日から」の上限として記録（過去の日の計算は変わらない）
   const d = Math.max(0, Math.round(+$('svDaily').value || 0)), today = todayStr();
   if(d !== limitOn(today)){
@@ -662,7 +653,6 @@ $('svImpGo').onclick = () => {
     const sid = x => String(x.id || x.ts || Math.random());
     const sv = Object.assign(blankSv(), { monthly: st.sv.monthly });
     sv.goal = +o.goal || 0;
-    sv.weekFood = +o.groceryBudget || 0;
     sv.limits = (o.limits || []).map(l => ({ from: l.from, amt: +l.amt }));
     sv.spends = o.spends.map(x => ({ id: sid(x), date: x.day || day(x.ts), memo: x.memo || '', amount: +x.amt, kind: 'daily' }))
       .concat((o.groceries || []).map(x => ({ id: sid(x), date: x.day || day(x.ts), memo: x.memo || '', amount: +x.amt, kind: 'food' })));
