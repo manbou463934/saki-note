@@ -112,6 +112,17 @@ mark{background:var(--sun); color:var(--on-sky); border-radius:3px; padding:0 1p
 .item.auto{border-left-color:var(--danger)}
 .amt{font-weight:700; font-variant-numeric:tabular-nums; margin-left:auto}
 .amt.minus{color:var(--danger)}
+.amt.plus{color:var(--sky)}
+details.day{background:var(--paper); border-radius:14px; margin-bottom:8px; padding:0 12px}
+details.day summary{display:flex; align-items:center; gap:8px; min-height:48px; cursor:pointer; list-style:none; font-size:14px}
+details.day summary::-webkit-details-marker{display:none}
+details.day summary::before{content:'▸'; color:var(--sub); transition:transform .15s}
+details.day[open] summary::before{transform:rotate(90deg)}
+details.day summary .d{font-weight:700; display:flex; gap:6px; align-items:center}
+details.day summary .s{color:var(--sub); font-size:13px}
+details.day .item{margin:0 0 8px; padding:8px 10px; background:var(--bg)}
+details.day .item .meta{font-size:13px}
+.del{border:1px solid var(--line); background:transparent; color:var(--sub); border-radius:999px; padding:2px 10px; min-height:30px; font-size:12px; cursor:pointer}
 .sum{font-size:14px; margin:4px 0 0; overflow-wrap:anywhere}
 .sum b{font-size:11px; color:var(--sub); font-weight:700; margin-right:6px}
 .prof{background:var(--paper); border-radius:14px; padding:12px 14px; margin-top:10px}
@@ -542,6 +553,7 @@ function ledger(){
 function savingsTotal(){ return sum(st.sv.deps) + sum(ledger()); }
 
 let svMonthSel = '';
+const svOpen = new Set(), svOpenTouched = new Set();   // 開いている日（描き直しても開いたまま）
 function fillSvMonths(){
   const now = todayStr().slice(0, 7);
   const ms = new Set([now]);
@@ -611,25 +623,44 @@ function renderSv(){
       ? { date: o.date, kind: 'left', amount: o.amount, memo: '予算の余りを自動で貯金（上限 ' + yen(o.lim) + '、使った額 ' + yen(o.spent) + '）' }
       : { date: o.date, kind: 'auto', amount: -o.amount, memo: '1日の上限オーバー分を貯金から引きました（上限 ' + yen(o.lim) + '、使った額 ' + yen(o.spent) + '）' }))
     .sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : (a.kind === 'auto' || a.kind === 'left') - (b.kind === 'auto' || b.kind === 'left'));
-  const label = { dep: '貯金', daily: '毎日の支出', food: '食材費（前のアプリ）', auto: '自動で引き落とし', left: '予算の余り' };
+  const label = { dep: '貯金', daily: '毎日の支出', food: '食材費', auto: '自動で引き落とし', left: '予算の余り' };
   const box = $('svList'); box.innerHTML = '';
   if(!rows.length){ box.innerHTML = '<p class="empty">まだ記録がありません。</p>'; return; }
-  rows.forEach(r => {
-    const el = document.createElement('div');
-    el.className = 'item ' + (r.kind === 'dep' || r.kind === 'left' ? 'dep' : r.kind === 'auto' ? 'auto' : 'spend');
-    const sign = r.kind === 'dep' || r.kind === 'left' ? '+' : '−';
-    el.innerHTML = '<div class="meta"><span class="badge">' + label[r.kind] + '</span><span>' + esc(fmt(r.date)) + '</span>' +
-      '<span class="amt' + (r.kind === 'auto' ? ' minus' : '') + '">' + sign + yen(r.amount) + '</span></div>' +
-      (r.memo ? '<p class="ex">' + esc(r.memo) + '</p>' : '') +
-      (r.id ? '<div class="acts"><button data-a="del">削除</button></div>' : '');
-    if(r.id){
-      const del = el.querySelector('[data-a=del]'); let armed = null;
-      del.onclick = () => {
-        if(armed){ clearTimeout(armed); st.sv.deps = st.sv.deps.filter(x => x.id !== r.id); st.sv.spends = st.sv.spends.filter(x => x.id !== r.id); save(); render(); return; }
-        del.textContent = 'もう一度で削除'; armed = setTimeout(() => { armed = null; del.textContent = '削除'; }, 3000);
-      };
-    }
-    box.appendChild(el);
+  // 日ごとに折りたたむ。見出しには「使った額」と「余り／オーバー」だけ出す
+  const groups = [];
+  rows.forEach(r => { const g = groups[groups.length - 1]; if(g && g.date === r.date) g.rows.push(r); else groups.push({ date: r.date, rows: [r] }); });
+  groups.forEach(g => {
+    const det = document.createElement('details');
+    det.className = 'day';
+    det.open = svOpen.has(g.date) || (!svOpenTouched.has(g.date) && g.date === today);
+    det.ontoggle = () => { svOpenTouched.add(g.date); det.open ? svOpen.add(g.date) : svOpen.delete(g.date); };
+    const spent = sum(g.rows.filter(r => r.kind === 'daily' || r.kind === 'food'));
+    const auto = g.rows.find(r => r.kind === 'auto' || r.kind === 'left');
+    const dep = sum(g.rows.filter(r => r.kind === 'dep'));
+    const wd = '日月火水木金土'[new Date(g.date + 'T00:00').getDay()];
+    det.innerHTML = '<summary><span class="d">' + esc(fmt(g.date).slice(5)) + '（' + wd + '）' + (g.date === today ? '<span class="badge new">今日</span>' : '') + '</span>' +
+      '<span class="s">' + (spent ? '使った ' + yen(spent) : '') + (dep ? ' 貯金 +' + yen(dep) : '') + '</span>' +
+      (auto ? '<span class="amt' + (auto.kind === 'auto' ? ' minus' : ' plus') + '">' + (auto.kind === 'auto' ? '−' : '+') + yen(auto.amount) + '</span>' : '<span class="amt"></span>') +
+      '</summary>';
+    g.rows.forEach(r => {
+      const el = document.createElement('div');
+      el.className = 'item ' + (r.kind === 'dep' || r.kind === 'left' ? 'dep' : r.kind === 'auto' ? 'auto' : 'spend');
+      const sign = r.kind === 'dep' || r.kind === 'left' ? '+' : '−';
+      el.innerHTML = '<div class="meta"><span class="badge">' + label[r.kind] + '</span>' +
+        (r.memo && r.id ? '<span>' + esc(r.memo) + '</span>' : '') +
+        '<span class="amt' + (r.kind === 'auto' ? ' minus' : '') + '">' + sign + yen(r.amount) + '</span>' +
+        (r.id ? '<button class="del" data-a="del" aria-label="削除">削除</button>' : '') + '</div>' +
+        (r.memo && !r.id ? '<p class="ex">' + esc(r.memo) + '</p>' : '');
+      if(r.id){
+        const del = el.querySelector('[data-a=del]'); let armed = null;
+        del.onclick = () => {
+          if(armed){ clearTimeout(armed); st.sv.deps = st.sv.deps.filter(x => x.id !== r.id); st.sv.spends = st.sv.spends.filter(x => x.id !== r.id); save(); render(); return; }
+          del.textContent = 'もう一度'; armed = setTimeout(() => { armed = null; del.textContent = '削除'; }, 3000);
+        };
+      }
+      det.appendChild(el);
+    });
+    box.appendChild(det);
   });
 }
 
