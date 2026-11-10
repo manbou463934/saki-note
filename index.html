@@ -100,7 +100,18 @@ mark{background:var(--sun); color:var(--on-sky); border-radius:3px; padding:0 1p
 .legend{display:flex; gap:12px; font-size:12px; color:var(--sub); margin-top:6px}
 .legend i{display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:-1px}
 .hidden{display:none !important}
-.tabs button{padding:0 4px}
+.tabs button{padding:0 4px; font-size:14px}
+.bar-h{display:flex; justify-content:space-between; gap:8px; font-size:13px; color:var(--sub); margin-bottom:6px}
+.bar{position:relative; height:14px; background:var(--track); border-radius:999px; overflow:hidden}
+.bar i{position:absolute; left:0; top:0; bottom:0; background:var(--sky); border-radius:999px; max-width:100%}
+.bar i.over{background:var(--danger)}
+.bar i.pace{background:transparent; border-right:2px solid var(--ink); border-radius:0; z-index:1}
+.stat b.minus{color:var(--danger)}
+.item.dep{border-left-color:var(--sky)}
+.item.spend{border-left-color:var(--sun)}
+.item.auto{border-left-color:var(--danger)}
+.amt{font-weight:700; font-variant-numeric:tabular-nums; margin-left:auto}
+.amt.minus{color:var(--danger)}
 .sum{font-size:14px; margin:4px 0 0; overflow-wrap:anywhere}
 .sum b{font-size:11px; color:var(--sub); font-weight:700; margin-right:6px}
 .prof{background:var(--paper); border-radius:14px; padding:12px 14px; margin-top:10px}
@@ -123,6 +134,7 @@ mark{background:var(--sun); color:var(--on-sky); border-radius:3px; padding:0 1p
     <button data-t="blog">ブログ<span class="n" id="nBlog"></span></button>
     <button data-t="talk">トーク<span class="n" id="nTalk"></span></button>
     <button data-t="prof">プロフ</button>
+    <button data-t="save">貯金</button>
   </div>
 
   <div class="row" style="margin-top:0">
@@ -173,6 +185,72 @@ mark{background:var(--sun); color:var(--on-sky); border-radius:3px; padding:0 1p
     </section>
   </div>
 
+  <!-- サイン会貯金 -->
+  <div id="pSave" class="hidden">
+    <section>
+      <h2>サイン会貯金</h2>
+      <div class="stats" id="svStats"></div>
+      <div class="card" style="margin-top:8px">
+        <div class="bar-h"><span>目標までの進み具合</span><span id="svGoalTxt"></span></div>
+        <div class="bar"><i id="svGoalBar"></i></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="row" style="margin-top:0;align-items:center">
+        <h2 style="margin:0">月の使用額</h2>
+        <select id="svMonth" aria-label="月を選ぶ" style="flex:none;width:auto"></select>
+      </div>
+      <div class="card" style="margin-top:8px">
+        <div class="bar-h"><span id="svMonthTxt"></span><span id="svMonthPct"></span></div>
+        <div class="bar"><i id="svPace" class="pace"></i><i id="svMonthBar"></i></div>
+        <p class="note" id="svMonthNote" style="margin-bottom:0"></p>
+        <p class="note" id="svWeekNote" style="margin:4px 0 0"></p>
+      </div>
+    </section>
+
+    <section>
+      <h2>記録する</h2>
+      <div class="card">
+        <div class="row" style="margin-top:0">
+          <input type="date" id="svDate" aria-label="日付">
+          <select id="svKind" aria-label="種類">
+            <option value="daily">毎日の支出</option>
+            <option value="food">食材費</option>
+            <option value="dep">貯金</option>
+          </select>
+        </div>
+        <div class="row">
+          <input type="text" id="svMemo" placeholder="メモ（例：昼食、コンビニ）">
+          <input type="number" id="svAmt" inputmode="numeric" min="0" placeholder="金額（円）" style="max-width:130px">
+        </div>
+        <div class="row"><button class="btn" id="svAdd" style="flex:1">記録する</button></div>
+        <p class="note">「毎日の支出」が1日の上限を超えたら、超えた分は自動で貯金から引かれます。月の使用額には食材費も含みます。</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>この月の記録</h2>
+      <div id="svList"></div>
+    </section>
+
+    <section>
+      <h2>設定</h2>
+      <div class="card">
+        <label class="lbl" for="svGoal">目標額</label>
+        <input type="number" id="svGoal" inputmode="numeric" min="0" placeholder="例：30000">
+        <label class="lbl" for="svDaily">1日の上限（食材費は含めない）</label>
+        <input type="number" id="svDaily" inputmode="numeric" min="0" placeholder="例：1000">
+        <label class="lbl" for="svWeekFood">週の食材費の予算（月曜はじまり）</label>
+        <input type="number" id="svWeekFood" inputmode="numeric" min="0" placeholder="例：5000">
+        <label class="lbl" for="svMonthly">月の使用上限（食材費もふくむ）</label>
+        <input type="number" id="svMonthly" inputmode="numeric" min="0" placeholder="例：50000">
+        <div class="row"><button class="btn" id="svSaveSet" style="flex:1">設定を保存</button></div>
+        <p class="note" id="svSetMsg"></p>
+      </div>
+    </section>
+  </div>
+
   <!-- トーク -->
   <div id="pTalk" class="hidden">
     <section>
@@ -215,7 +293,8 @@ mark{background:var(--sun); color:var(--on-sky); border-radius:3px; padding:0 1p
 
 <script>
 const KEY = 'saki-note';
-const blank = () => ({ talks: [], read: {}, notes: {}, lastSeen: '' });
+const blankSv = () => ({ goal: 0, daily: 0, weekFood: 0, monthly: 0, deps: [], spends: [] });
+const blank = () => ({ talks: [], read: {}, notes: {}, lastSeen: '', sv: blankSv() });
 let st = blank();
 let canStore = true;
 let blog = { posts: [], updated: null };
@@ -230,7 +309,8 @@ const nowLocal = () => { const d = new Date(); return d.getFullYear()+'-'+pad(d.
 const fmt = s => { const m = /^(\d{4})-(\d\d)-(\d\d)(?:T(\d\d):(\d\d))?/.exec(s || ''); return m ? (m[1]+'/'+(+m[2])+'/'+(+m[3])+(m[4] ? ' '+m[4]+':'+m[5] : '')) : (s || ''); };
 const splitTags = s => [...new Set(String(s || '').split(/[\s　,、#＃]+/).map(t => t.trim()).filter(Boolean))];
 
-function load(){ try{ const v = localStorage.getItem(KEY); if(v) st = Object.assign(blank(), JSON.parse(v)); }catch(e){ canStore = false; } }
+function load(){ try{ const v = localStorage.getItem(KEY); if(v) st = Object.assign(blank(), JSON.parse(v)); }catch(e){ canStore = false; } fixSv(); }
+function fixSv(){ st.sv = Object.assign(blankSv(), st.sv || {}); }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(st)); }catch(e){ canStore = false; } }
 
 function hl(text, q){
@@ -351,6 +431,7 @@ function render(){
   $('tagCloud').querySelectorAll('[data-tag]').forEach(b => b.onclick = () => setTag(b.dataset.tag === tagFilter ? '' : b.dataset.tag));
 
   renderProf();
+  renderSv();
   $('storeNote').textContent = canStore ? '' : 'この環境ではメモが保存されません。ページを閉じると消えます。';
 }
 
@@ -411,6 +492,134 @@ function fillMonths(){
   $('month').innerHTML = '<option value="">すべての月</option>' + ms.map(m => '<option value="' + m + '">' + m.replace('-', '年') + '月</option>').join('');
 }
 
+/* ---------- サイン会貯金 ---------- */
+const yen = n => (n < 0 ? '−' : '') + '¥' + Math.abs(Math.round(n)).toLocaleString('ja-JP');
+const ymd = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+const todayStr = () => ymd(new Date());
+const sum = a => a.reduce((s, x) => s + x.amount, 0);
+function weekStart(dateStr){ const d = new Date(dateStr + 'T00:00'); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return ymd(d); }
+
+/* 1日の上限を超えた日ごとの「超えた分」。貯金から自動で引く額 */
+function overages(){
+  const sv = st.sv;
+  if(!(sv.daily > 0)) return [];
+  const byDay = {};
+  sv.spends.filter(x => x.kind === 'daily').forEach(x => byDay[x.date] = (byDay[x.date] || 0) + x.amount);
+  return Object.keys(byDay).filter(d => byDay[d] > sv.daily).map(d => ({ date: d, amount: byDay[d] - sv.daily, spent: byDay[d] }));
+}
+function savingsTotal(){ return sum(st.sv.deps) - sum(overages()); }
+
+let svMonthSel = '';
+function fillSvMonths(){
+  const now = todayStr().slice(0, 7);
+  const ms = new Set([now]);
+  st.sv.spends.concat(st.sv.deps).forEach(x => ms.add(x.date.slice(0, 7)));
+  const list = [...ms].sort().reverse();
+  if(!svMonthSel || !ms.has(svMonthSel)) svMonthSel = now;
+  $('svMonth').innerHTML = list.map(m => '<option value="' + m + '"' + (m === svMonthSel ? ' selected' : '') + '>' + m.replace('-', '年') + '月</option>').join('');
+}
+
+function renderSv(){
+  const sv = st.sv, today = todayStr(), overs = overages();
+  const total = savingsTotal();
+  const todaySpent = sum(sv.spends.filter(x => x.kind === 'daily' && x.date === today));
+  const ws = weekStart(today);
+  const weekFood = sum(sv.spends.filter(x => x.kind === 'food' && x.date >= ws && x.date <= today));
+
+  const cards = [
+    ['貯金の合計', yen(total), total < 0],
+    ['目標まで', sv.goal > 0 ? (total >= sv.goal ? '達成！' : yen(sv.goal - total)) : '未設定', false],
+    ['今日の使用額', yen(todaySpent) + (sv.daily > 0 ? '' : ''), sv.daily > 0 && todaySpent > sv.daily]
+  ];
+  $('svStats').innerHTML = cards.map(c => '<div class="stat"><small>' + c[0] + '</small><b class="' + (c[2] ? 'minus' : '') + '">' + c[1] + '</b></div>').join('');
+
+  const gp = sv.goal > 0 ? Math.max(0, Math.min(1, total / sv.goal)) : 0;
+  $('svGoalBar').style.width = (gp * 100) + '%';
+  $('svGoalTxt').textContent = sv.goal > 0 ? Math.round(gp * 100) + '%（' + yen(total) + ' / ' + yen(sv.goal) + '）' : '目標額を設定してください';
+
+  // 月の使用額（毎日の支出＋食材費）
+  fillSvMonths();
+  const m = svMonthSel;
+  const mSpends = sv.spends.filter(x => x.date.startsWith(m));
+  const mSpent = sum(mSpends), mFood = sum(mSpends.filter(x => x.kind === 'food'));
+  const [yy, mm] = m.split('-').map(Number);
+  const days = new Date(yy, mm, 0).getDate();
+  const isNow = m === today.slice(0, 7);
+  const dayNo = isNow ? +today.slice(8) : days;
+  if(sv.monthly > 0){
+    const p = mSpent / sv.monthly;
+    $('svMonthBar').style.width = Math.min(100, p * 100) + '%';
+    $('svMonthBar').className = p > 1 ? 'over' : '';
+    $('svMonthTxt').textContent = yen(mSpent) + ' / ' + yen(sv.monthly);
+    $('svMonthPct').textContent = Math.round(p * 100) + '%';
+    const pace = sv.monthly * dayNo / days;
+    $('svPace').style.width = Math.min(100, pace / sv.monthly * 100) + '%';
+    $('svPace').classList.toggle('hidden', !isNow);
+    let note;
+    if(mSpent > sv.monthly) note = '上限を ' + yen(mSpent - sv.monthly) + ' 超えています。';
+    else if(isNow){
+      const left = days - dayNo + 1;
+      note = '残り ' + yen(sv.monthly - mSpent) + '。あと' + left + '日なので、1日あたり ' + yen((sv.monthly - mSpent) / left) + ' まで使えます。' +
+        (mSpent > pace ? '今日までの目安（線）より ' + yen(mSpent - pace) + ' 多めです。' : '今日までの目安（線）より ' + yen(pace - mSpent) + ' 少なくて順調です。');
+    } else note = yen(sv.monthly - mSpent) + ' 残して終わりました。';
+    $('svMonthNote').textContent = note + '（うち食材費 ' + yen(mFood) + '）';
+  } else {
+    $('svMonthBar').style.width = '0'; $('svPace').classList.add('hidden');
+    $('svMonthTxt').textContent = yen(mSpent) + '（うち食材費 ' + yen(mFood) + '）';
+    $('svMonthPct').textContent = '';
+    $('svMonthNote').textContent = '「設定」で月の使用上限を決めると、進み具合が見られます。';
+  }
+  $('svWeekNote').textContent = sv.weekFood > 0
+    ? '今週の食材費：' + yen(weekFood) + ' / ' + yen(sv.weekFood) + (weekFood > sv.weekFood ? '（' + yen(weekFood - sv.weekFood) + ' オーバー）' : '（残り ' + yen(sv.weekFood - weekFood) + '）')
+    : '';
+
+  // この月の記録（自動の引き落としもふくむ）
+  const rows = sv.deps.filter(x => x.date.startsWith(m)).map(x => ({ ...x, kind: 'dep' }))
+    .concat(mSpends)
+    .concat(overs.filter(o => o.date.startsWith(m)).map(o => ({ date: o.date, kind: 'auto', amount: o.amount, memo: '1日の上限オーバー分を貯金から引きました（この日の支出 ' + yen(o.spent) + '）' })))
+    .sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : (a.kind === 'auto') - (b.kind === 'auto'));
+  const label = { dep: '貯金', daily: '毎日の支出', food: '食材費', auto: '自動で引き落とし' };
+  const box = $('svList'); box.innerHTML = '';
+  if(!rows.length){ box.innerHTML = '<p class="empty">まだ記録がありません。</p>'; return; }
+  rows.forEach(r => {
+    const el = document.createElement('div');
+    el.className = 'item ' + (r.kind === 'dep' ? 'dep' : r.kind === 'auto' ? 'auto' : 'spend');
+    const sign = r.kind === 'dep' ? '+' : '−';
+    el.innerHTML = '<div class="meta"><span class="badge">' + label[r.kind] + '</span><span>' + esc(fmt(r.date)) + '</span>' +
+      '<span class="amt' + (r.kind === 'auto' ? ' minus' : '') + '">' + sign + yen(r.amount) + '</span></div>' +
+      (r.memo ? '<p class="ex">' + esc(r.memo) + '</p>' : '') +
+      (r.id ? '<div class="acts"><button data-a="del">削除</button></div>' : '');
+    if(r.id){
+      const del = el.querySelector('[data-a=del]'); let armed = null;
+      del.onclick = () => {
+        if(armed){ clearTimeout(armed); st.sv.deps = st.sv.deps.filter(x => x.id !== r.id); st.sv.spends = st.sv.spends.filter(x => x.id !== r.id); save(); render(); return; }
+        del.textContent = 'もう一度で削除'; armed = setTimeout(() => { armed = null; del.textContent = '削除'; }, 3000);
+      };
+    }
+    box.appendChild(el);
+  });
+}
+
+function fillSvSettings(){
+  const sv = st.sv;
+  [['svGoal', 'goal'], ['svDaily', 'daily'], ['svWeekFood', 'weekFood'], ['svMonthly', 'monthly']].forEach(([id, k]) => $(id).value = sv[k] || '');
+}
+$('svSaveSet').onclick = () => {
+  [['svGoal', 'goal'], ['svDaily', 'daily'], ['svWeekFood', 'weekFood'], ['svMonthly', 'monthly']].forEach(([id, k]) => st.sv[k] = Math.max(0, Math.round(+$(id).value || 0)));
+  save(); render(); $('svSetMsg').textContent = '保存しました。';
+  setTimeout(() => $('svSetMsg').textContent = '', 2500);
+};
+$('svAdd').onclick = () => {
+  const amount = Math.round(+$('svAmt').value);
+  if(!(amount > 0)){ $('svAmt').focus(); return; }
+  const rec = { id: Date.now() + '-' + Math.random().toString(36).slice(2, 7), date: $('svDate').value || todayStr(), memo: $('svMemo').value.trim(), amount };
+  const kind = $('svKind').value;
+  if(kind === 'dep') st.sv.deps.push(rec); else st.sv.spends.push(Object.assign(rec, { kind }));
+  svMonthSel = rec.date.slice(0, 7);
+  save(); $('svMemo').value = ''; $('svAmt').value = ''; render();
+};
+$('svMonth').onchange = () => { svMonthSel = $('svMonth').value; render(); };
+
 /* ---------- トーク入力 ---------- */
 function resetForm(){
   editing = null;
@@ -442,6 +651,8 @@ function switchTab(t){
   $('pBlog').classList.toggle('hidden', t !== 'blog');
   $('pTalk').classList.toggle('hidden', t !== 'talk');
   $('pProf').classList.toggle('hidden', t !== 'prof');
+  $('pSave').classList.toggle('hidden', t !== 'save');
+  $('q').parentElement.classList.toggle('hidden', t === 'save');
   try{ sessionStorage.setItem(KEY + '-tab', t); }catch(e){}
 }
 $('tabs').onclick = e => { const b = e.target.closest('button'); if(b) switchTab(b.dataset.t); };
@@ -467,7 +678,7 @@ $('bkRestore').onclick = () => {
   try{
     const o = JSON.parse($('bkText').value.trim());
     if(!o || !Array.isArray(o.talks)) throw new Error('bad');
-    st = Object.assign(blank(), o); save(); render();
+    st = Object.assign(blank(), o); fixSv(); fillSvSettings(); save(); render();
     $('bkText').classList.add('hidden'); $('bkRow').classList.add('hidden');
     $('bkMsg').textContent = '復元しました。';
   }catch(e){ $('bkMsg').textContent = '読み込めませんでした。控えを全部コピーして貼り付けてください。'; }
@@ -478,6 +689,8 @@ load();
 prevSeen = st.lastSeen;
 try{ const t = sessionStorage.getItem(KEY + '-tab'); if(t) switchTab(t); }catch(e){}
 resetForm();
+$('svDate').value = todayStr();
+fillSvSettings();
 render();
 fetch('data/saki-blog.json', { cache: 'no-cache' })
   .then(r => r.ok ? r.json() : Promise.reject(r.status))
