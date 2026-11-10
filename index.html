@@ -225,7 +225,7 @@ mark{background:var(--sun); color:var(--on-sky); border-radius:3px; padding:0 1p
           <input type="number" id="svAmt" inputmode="numeric" min="0" placeholder="金額（円）" style="max-width:130px">
         </div>
         <div class="row"><button class="btn" id="svAdd" style="flex:1">記録する</button></div>
-        <p class="note">「毎日の支出」が1日の上限を超えたら、超えた分は自動で貯金から引かれます。月の使用額には食材費も含みます。</p>
+        <p class="note">「毎日の支出」が1日の上限を超えたら、超えた分はすぐ貯金から引かれます。上限より少なく終わった日は、余りが次の日に自動で貯金に入ります。月の使用額には食材費も含みます。</p>
       </div>
     </section>
 
@@ -241,12 +241,16 @@ mark{background:var(--sun); color:var(--on-sky); border-radius:3px; padding:0 1p
         <input type="number" id="svGoal" inputmode="numeric" min="0" placeholder="例：30000">
         <label class="lbl" for="svDaily">1日の上限（食材費は含めない）</label>
         <input type="number" id="svDaily" inputmode="numeric" min="0" placeholder="例：1000">
+        <p class="note" style="margin:4px 0 0">変えると「今日から」の上限になります。過去の日は当時の上限で計算します。<br><span id="svLimHist"></span></p>
         <label class="lbl" for="svWeekFood">週の食材費の予算（月曜はじまり）</label>
         <input type="number" id="svWeekFood" inputmode="numeric" min="0" placeholder="例：5000">
         <label class="lbl" for="svMonthly">月の使用上限（食材費もふくむ）</label>
         <input type="number" id="svMonthly" inputmode="numeric" min="0" placeholder="例：50000">
         <div class="row"><button class="btn" id="svSaveSet" style="flex:1">設定を保存</button></div>
         <p class="note" id="svSetMsg"></p>
+        <div class="row"><button class="btn ghost" id="svImport" style="flex:1">前の貯金アプリから取り込む</button></div>
+        <textarea id="svImpText" class="hidden" rows="5" placeholder="前のアプリのデータ（{&quot;goal&quot;:… で始まる文字）を貼り付け" aria-label="取り込むデータ" style="margin-top:8px;font-size:13px;word-break:break-all"></textarea>
+        <div class="row"><button class="btn hidden" id="svImpGo" style="flex:1">このデータを取り込む</button></div>
       </div>
     </section>
   </div>
@@ -293,7 +297,7 @@ mark{background:var(--sun); color:var(--on-sky); border-radius:3px; padding:0 1p
 
 <script>
 const KEY = 'saki-note';
-const blankSv = () => ({ goal: 0, daily: 0, weekFood: 0, monthly: 0, deps: [], spends: [] });
+const blankSv = () => ({ goal: 0, limits: [], weekFood: 0, monthly: 0, deps: [], spends: [] });
 const blank = () => ({ talks: [], read: {}, notes: {}, lastSeen: '', sv: blankSv() });
 let st = blank();
 let canStore = true;
@@ -310,7 +314,15 @@ const fmt = s => { const m = /^(\d{4})-(\d\d)-(\d\d)(?:T(\d\d):(\d\d))?/.exec(s 
 const splitTags = s => [...new Set(String(s || '').split(/[\s　,、#＃]+/).map(t => t.trim()).filter(Boolean))];
 
 function load(){ try{ const v = localStorage.getItem(KEY); if(v) st = Object.assign(blank(), JSON.parse(v)); }catch(e){ canStore = false; } fixSv(); }
-function fixSv(){ st.sv = Object.assign(blankSv(), st.sv || {}); }
+function fixSv(){
+  st.sv = Object.assign(blankSv(), st.sv || {});
+  // 1つだけの上限（daily）で保存していた頃のデータを、日付つきの上限に移す
+  if(st.sv.daily > 0 && !st.sv.limits.length){
+    const ds = st.sv.spends.map(x => x.date).sort();
+    st.sv.limits = [{ from: ds[0] || todayStr(), amt: st.sv.daily }];
+  }
+  delete st.sv.daily;
+}
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(st)); }catch(e){ canStore = false; } }
 
 function hl(text, q){
@@ -499,15 +511,31 @@ const todayStr = () => ymd(new Date());
 const sum = a => a.reduce((s, x) => s + x.amount, 0);
 function weekStart(dateStr){ const d = new Date(dateStr + 'T00:00'); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return ymd(d); }
 
-/* 1日の上限を超えた日ごとの「超えた分」。貯金から自動で引く額 */
-function overages(){
-  const sv = st.sv;
-  if(!(sv.daily > 0)) return [];
+/* 1日の上限は日付ごとに変えられる（limits: [{from, amt}]）。その日に効いている上限 */
+function limitOn(d){
+  let v = 0;
+  st.sv.limits.slice().sort((a, b) => a.from < b.from ? -1 : 1).forEach(l => { if(l.from <= d) v = l.amt; });
+  return v;
+}
+/* 日ごとの自動の出入り：終わった日は「上限−使った額」を貯金へ（余りは＋、オーバーは−）。
+   今日はオーバーしたときだけ、すぐ引く（余りは日が終わってから入る） */
+function ledger(){
+  const sv = st.sv, today = todayStr();
+  if(!sv.limits.length) return [];
   const byDay = {};
   sv.spends.filter(x => x.kind === 'daily').forEach(x => byDay[x.date] = (byDay[x.date] || 0) + x.amount);
-  return Object.keys(byDay).filter(d => byDay[d] > sv.daily).map(d => ({ date: d, amount: byDay[d] - sv.daily, spent: byDay[d] }));
+  const start = sv.limits.map(l => l.from).sort()[0];
+  const out = [];
+  for(let d = new Date(start + 'T00:00'); ymd(d) <= today; d.setDate(d.getDate() + 1)){
+    const k = ymd(d), lim = limitOn(k), spent = byDay[k] || 0;
+    if(!(lim > 0)) continue;
+    const diff = lim - spent;
+    if(k < today && diff !== 0) out.push({ date: k, amount: diff, spent, lim });
+    if(k === today && diff < 0) out.push({ date: k, amount: diff, spent, lim });
+  }
+  return out;
 }
-function savingsTotal(){ return sum(st.sv.deps) - sum(overages()); }
+function savingsTotal(){ return sum(st.sv.deps) + sum(ledger()); }
 
 let svMonthSel = '';
 function fillSvMonths(){
@@ -520,16 +548,17 @@ function fillSvMonths(){
 }
 
 function renderSv(){
-  const sv = st.sv, today = todayStr(), overs = overages();
-  const total = savingsTotal();
+  const sv = st.sv, today = todayStr(), led = ledger();
+  const total = sum(sv.deps) + sum(led);
   const todaySpent = sum(sv.spends.filter(x => x.kind === 'daily' && x.date === today));
+  const todayLim = limitOn(today);
   const ws = weekStart(today);
   const weekFood = sum(sv.spends.filter(x => x.kind === 'food' && x.date >= ws && x.date <= today));
 
   const cards = [
     ['貯金の合計', yen(total), total < 0],
     ['目標まで', sv.goal > 0 ? (total >= sv.goal ? '達成！' : yen(sv.goal - total)) : '未設定', false],
-    ['今日の使用額', yen(todaySpent) + (sv.daily > 0 ? '' : ''), sv.daily > 0 && todaySpent > sv.daily]
+    todayLim > 0 ? ['今日の残り', yen(todayLim - todaySpent), todaySpent > todayLim] : ['今日の使用額', yen(todaySpent), false]
   ];
   $('svStats').innerHTML = cards.map(c => '<div class="stat"><small>' + c[0] + '</small><b class="' + (c[2] ? 'minus' : '') + '">' + c[1] + '</b></div>').join('');
 
@@ -576,15 +605,17 @@ function renderSv(){
   // この月の記録（自動の引き落としもふくむ）
   const rows = sv.deps.filter(x => x.date.startsWith(m)).map(x => ({ ...x, kind: 'dep' }))
     .concat(mSpends)
-    .concat(overs.filter(o => o.date.startsWith(m)).map(o => ({ date: o.date, kind: 'auto', amount: o.amount, memo: '1日の上限オーバー分を貯金から引きました（この日の支出 ' + yen(o.spent) + '）' })))
-    .sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : (a.kind === 'auto') - (b.kind === 'auto'));
-  const label = { dep: '貯金', daily: '毎日の支出', food: '食材費', auto: '自動で引き落とし' };
+    .concat(led.filter(o => o.date.startsWith(m)).map(o => o.amount > 0
+      ? { date: o.date, kind: 'left', amount: o.amount, memo: '予算の余りを自動で貯金（上限 ' + yen(o.lim) + '、使った額 ' + yen(o.spent) + '）' }
+      : { date: o.date, kind: 'auto', amount: -o.amount, memo: '1日の上限オーバー分を貯金から引きました（上限 ' + yen(o.lim) + '、使った額 ' + yen(o.spent) + '）' }))
+    .sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : (a.kind === 'auto' || a.kind === 'left') - (b.kind === 'auto' || b.kind === 'left'));
+  const label = { dep: '貯金', daily: '毎日の支出', food: '食材費', auto: '自動で引き落とし', left: '予算の余り' };
   const box = $('svList'); box.innerHTML = '';
   if(!rows.length){ box.innerHTML = '<p class="empty">まだ記録がありません。</p>'; return; }
   rows.forEach(r => {
     const el = document.createElement('div');
-    el.className = 'item ' + (r.kind === 'dep' ? 'dep' : r.kind === 'auto' ? 'auto' : 'spend');
-    const sign = r.kind === 'dep' ? '+' : '−';
+    el.className = 'item ' + (r.kind === 'dep' || r.kind === 'left' ? 'dep' : r.kind === 'auto' ? 'auto' : 'spend');
+    const sign = r.kind === 'dep' || r.kind === 'left' ? '+' : '−';
     el.innerHTML = '<div class="meta"><span class="badge">' + label[r.kind] + '</span><span>' + esc(fmt(r.date)) + '</span>' +
       '<span class="amt' + (r.kind === 'auto' ? ' minus' : '') + '">' + sign + yen(r.amount) + '</span></div>' +
       (r.memo ? '<p class="ex">' + esc(r.memo) + '</p>' : '') +
@@ -602,12 +633,45 @@ function renderSv(){
 
 function fillSvSettings(){
   const sv = st.sv;
-  [['svGoal', 'goal'], ['svDaily', 'daily'], ['svWeekFood', 'weekFood'], ['svMonthly', 'monthly']].forEach(([id, k]) => $(id).value = sv[k] || '');
+  [['svGoal', 'goal'], ['svWeekFood', 'weekFood'], ['svMonthly', 'monthly']].forEach(([id, k]) => $(id).value = sv[k] || '');
+  $('svDaily').value = limitOn(todayStr()) || '';
+  const hist = sv.limits.slice().sort((a, b) => a.from < b.from ? -1 : 1);
+  $('svLimHist').textContent = hist.length ? 'これまで：' + hist.map(l => fmt(l.from) + '〜 ' + yen(l.amt)).join(' ／ ') : '';
 }
 $('svSaveSet').onclick = () => {
-  [['svGoal', 'goal'], ['svDaily', 'daily'], ['svWeekFood', 'weekFood'], ['svMonthly', 'monthly']].forEach(([id, k]) => st.sv[k] = Math.max(0, Math.round(+$(id).value || 0)));
-  save(); render(); $('svSetMsg').textContent = '保存しました。';
+  [['svGoal', 'goal'], ['svWeekFood', 'weekFood'], ['svMonthly', 'monthly']].forEach(([id, k]) => st.sv[k] = Math.max(0, Math.round(+$(id).value || 0)));
+  // 1日の上限を変えたら「今日から」の上限として記録（過去の日の計算は変わらない）
+  const d = Math.max(0, Math.round(+$('svDaily').value || 0)), today = todayStr();
+  if(d !== limitOn(today)){
+    st.sv.limits = st.sv.limits.filter(l => l.from !== today);
+    st.sv.limits.push({ from: today, amt: d });
+  }
+  save(); fillSvSettings(); render(); $('svSetMsg').textContent = '保存しました。';
   setTimeout(() => $('svSetMsg').textContent = '', 2500);
+};
+/* 前の貯金アプリのデータ（JSON）を取り込む。「予算の余り」は自動計算されるので取り込まない */
+$('svImport').onclick = () => {
+  const ta = $('svImpText');
+  if(ta.classList.contains('hidden')){ ta.classList.remove('hidden'); $('svImpGo').classList.remove('hidden'); ta.focus(); return; }
+};
+$('svImpGo').onclick = () => {
+  try{
+    const o = JSON.parse($('svImpText').value.trim());
+    if(!o || !Array.isArray(o.spends)) throw new Error('bad');
+    const day = ts => ymd(new Date(ts));
+    const sid = x => String(x.id || x.ts || Math.random());
+    const sv = Object.assign(blankSv(), { monthly: st.sv.monthly });
+    sv.goal = +o.goal || 0;
+    sv.weekFood = +o.groceryBudget || 0;
+    sv.limits = (o.limits || []).map(l => ({ from: l.from, amt: +l.amt }));
+    sv.spends = o.spends.map(x => ({ id: sid(x), date: x.day || day(x.ts), memo: x.memo || '', amount: +x.amt, kind: 'daily' }))
+      .concat((o.groceries || []).map(x => ({ id: sid(x), date: x.day || day(x.ts), memo: x.memo || '', amount: +x.amt, kind: 'food' })));
+    sv.deps = (o.items || []).filter(x => x.memo !== '予算の余り').map(x => ({ id: sid(x), date: x.day || day(x.ts), memo: x.memo || '', amount: +x.amt }));
+    if(st.sv.spends.length + st.sv.deps.length && !confirm('今の貯金の記録を、取り込むデータで置き換えます。よろしいですか？')) return;
+    st.sv = sv; save(); fillSvSettings(); render();
+    $('svImpText').value = ''; $('svImpText').classList.add('hidden'); $('svImpGo').classList.add('hidden');
+    $('svSetMsg').textContent = '取り込みました（支出' + sv.spends.length + '件）。';
+  }catch(e){ $('svSetMsg').textContent = '読み込めませんでした。前のアプリのデータを全部コピーして貼り付けてください。'; }
 };
 $('svAdd').onclick = () => {
   const amount = Math.round(+$('svAmt').value);
